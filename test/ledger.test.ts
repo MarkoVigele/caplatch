@@ -30,7 +30,7 @@ describe("ledger", () => {
     expect(response.period).toBe("month");
     expect(response.resetsAt).toBe(windowFor(Date.now(), "month").resetsAt);
     const root = await fetchRoot();
-    expect(root).toEqual({ name: "caplatch", slice: "M1b" });
+    expect(root).toEqual({ name: "caplatch", slice: "M1c" });
   });
 
   it("holds cents, settles the actual, and releases the rest", async () => {

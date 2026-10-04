@@ -1,7 +1,7 @@
 import { LEDGER_NAME, REQUEST_ID_HEADER } from "./constants";
-import { decideChat } from "./gate";
+import { proxyChat } from "./gate";
 import { isRequestId } from "./input";
-import { forwardIfEnabled } from "./upstream";
+import { chatMode } from "./upstream";
 
 export { SpendLedger } from "./ledger";
 
@@ -112,7 +112,7 @@ export default {
     try {
       const stub = ledger(env);
       if (request.method === "GET" && (url.pathname === "/" || url.pathname === "")) {
-        return json({ name: "caplatch", slice: "M1b" }, 200);
+        return json({ name: "caplatch", slice: "M1c" }, 200);
       }
       if (request.method === "GET" && url.pathname === "/status") {
         return json(await stub.status(), 200);
@@ -178,17 +178,22 @@ export default {
         if (requestId instanceof Response) {
           return requestId;
         }
-        const decision = await decideChat(
+        const decision = await proxyChat(
           {
             reserve: (amountCents, id) => stub.reserve(amountCents, id),
             settle: (reservationId, actualCents) => stub.settle(reservationId, actualCents),
           },
           body,
           requestId,
+          chatMode(env),
         );
-        if (decision.kind === "accepted") {
-          await forwardIfEnabled(decision.payload);
-          return json(decision.result, httpStatus(decision.result));
+        if (decision.kind === "upstream") {
+          const payload =
+            decision.status === 204 || decision.status === 205 || decision.status === 304 ? null : decision.body;
+          return new Response(payload, {
+            status: decision.status,
+            headers: { "content-type": decision.contentType },
+          });
         }
         return json(decision.body, decision.status);
       }

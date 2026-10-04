@@ -49,15 +49,61 @@ export async function postJson(
   );
 }
 
+export type UpstreamCall = {
+  url: string;
+  method: string;
+  authorization: string | null;
+  body: string | null;
+};
+
+export type UpstreamResponder = (call: UpstreamCall) => Response | Promise<Response>;
+
+function headerValue(input: RequestInfo | URL, init: RequestInit | undefined, name: string): string | null {
+  if (init?.headers) {
+    return new Headers(init.headers).get(name);
+  }
+  if (input instanceof Request) {
+    return input.headers.get(name);
+  }
+  return null;
+}
+
+function bodyText(init: RequestInit | undefined): string | null {
+  if (typeof init?.body === "string") {
+    return init.body;
+  }
+  return null;
+}
+
+function methodOf(input: RequestInfo | URL, init: RequestInit | undefined): string {
+  if (typeof init?.method === "string") {
+    return init.method;
+  }
+  if (input instanceof Request) {
+    return input.method;
+  }
+  return "GET";
+}
+
 export async function withUpstreamSpy<T>(
   run: () => Promise<T>,
-): Promise<{ result: T; upstreamCalls: number }> {
-  const seen: string[] = [];
+  respond?: UpstreamResponder,
+): Promise<{ result: T; upstreamCalls: number; calls: UpstreamCall[] }> {
+  const calls: UpstreamCall[] = [];
   const real = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = requestUrl(input);
     if (isUpstreamUrl(url)) {
-      seen.push(url);
+      const call: UpstreamCall = {
+        url,
+        method: methodOf(input, init),
+        authorization: headerValue(input, init, "authorization"),
+        body: bodyText(init),
+      };
+      calls.push(call);
+      if (respond) {
+        return respond(call);
+      }
       return new Response(JSON.stringify({ ok: true, error: "upstream_called" }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -67,7 +113,7 @@ export async function withUpstreamSpy<T>(
   }) as typeof fetch;
   try {
     const result = await run();
-    return { result, upstreamCalls: seen.length };
+    return { result, upstreamCalls: calls.length, calls };
   } finally {
     globalThis.fetch = real;
   }
