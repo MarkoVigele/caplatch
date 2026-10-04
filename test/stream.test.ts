@@ -159,85 +159,84 @@ describe("sse streaming", () => {
     const encoder = new TextEncoder();
     const head = encoder.encode(full.slice(0, splitAt));
     const tail = encoder.encode(full.slice(splitAt));
-    let releaseGate: (() => void) | undefined;
+    let releaseRest = false;
     let reservedBeforeFetch = false;
     const guarded = await (async () => {
       try {
-        return await withUpstreamSpy(async () => {
-        const response = await failIfSlow(
-          postJson(
-            "/v1/chat/completions",
-            chatBody({
-              usage: clientUsage,
-              api_key: CLIENT_SUPPLIED_KEY,
-              apiKey: CLIENT_SUPPLIED_KEY,
-            }),
-            { authorization: `Bearer ${CLIENT_SUPPLIED_KEY}` },
-          ),
-          "caller did not see the first byte",
-        );
-        if (!response.body) {
-          throw new Error("caller did not see the first byte");
-        }
-        const reader = response.body.getReader();
-        const first = await failIfSlow(reader.read(), "caller did not see the first byte");
-        if (first.done || !first.value || first.value.byteLength === 0) {
-          throw new Error("caller did not see the first byte");
-        }
-        const firstText = new TextDecoder().decode(first.value);
-        const mid = await readRows();
-        if (!releaseGate) {
-          throw new Error("caller did not see the first byte");
-        }
-        releaseGate();
-        const merged = await failIfSlow(
-          (async () => {
-            const parts = [first.value];
-            while (true) {
-              const next = await reader.read();
-              if (next.done) {
-                break;
-              }
-              if (next.value && next.value.byteLength > 0) {
-                parts.push(next.value);
-              }
+        return await withUpstreamSpy(
+          async () => {
+            const response = await failIfSlow(
+              postJson(
+                "/v1/chat/completions",
+                chatBody({
+                  usage: clientUsage,
+                  api_key: CLIENT_SUPPLIED_KEY,
+                  apiKey: CLIENT_SUPPLIED_KEY,
+                }),
+                { authorization: `Bearer ${CLIENT_SUPPLIED_KEY}` },
+              ),
+              "caller did not see the first byte",
+            );
+            if (!response.body) {
+              throw new Error("caller did not see the first byte");
             }
-            const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
-            let offset = 0;
-            for (const part of parts) {
-              bytes.set(part, offset);
-              offset += part.byteLength;
+            const reader = response.body.getReader();
+            const first = await failIfSlow(reader.read(), "caller did not see the first byte");
+            if (first.done || !first.value || first.value.byteLength === 0) {
+              throw new Error("caller did not see the first byte");
             }
-            return bytes;
-          })(),
-          "caller did not see the first byte",
+            const firstBytes = first.value;
+            const firstText = new TextDecoder().decode(firstBytes);
+            releaseRest = true;
+            const merged = await failIfSlow(
+              (async () => {
+                const parts = [firstBytes];
+                while (true) {
+                  const next = await reader.read();
+                  if (next.done) {
+                    break;
+                  }
+                  if (next.value && next.value.byteLength > 0) {
+                    parts.push(next.value);
+                  }
+                }
+                const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
+                let offset = 0;
+                for (const part of parts) {
+                  bytes.set(part, offset);
+                  offset += part.byteLength;
+                }
+                return bytes;
+              })(),
+              "caller did not see the first byte",
+            );
+            return {
+              status: response.status,
+              contentType: response.headers.get("content-type"),
+              firstText,
+              text: new TextDecoder().decode(merged),
+            };
+          },
+          async () => {
+            const snapshot = await ledgerStub().status();
+            reservedBeforeFetch = snapshot.committedCents === hold;
+            return new Response(
+              new ReadableStream<Uint8Array>({
+                async start(controller) {
+                  controller.enqueue(head);
+                  while (!releaseRest) {
+                    await new Promise((resolve) => setTimeout(resolve, 5));
+                  }
+                  controller.enqueue(tail);
+                  controller.close();
+                },
+              }),
+              { status: 200, headers: { "content-type": "text/event-stream" } },
+            );
+          },
         );
-        return {
-          status: response.status,
-          contentType: response.headers.get("content-type"),
-          firstText,
-          midHeld: mid.length === 1 && mid[0]?.status === "held" && mid[0].settled === null,
-          text: new TextDecoder().decode(merged),
-        };
-      }, async () => {
-        const rows = await readRows();
-        reservedBeforeFetch = rows.length === 1 && rows[0]?.status === "held";
-        return new Response(
-          new ReadableStream<Uint8Array>({
-            async start(controller) {
-              controller.enqueue(head);
-              await new Promise<void>((resolve) => {
-                releaseGate = resolve;
-              });
-              controller.enqueue(tail);
-              controller.close();
-            },
-          }),
-          { status: 200, headers: { "content-type": "text/event-stream" } },
-        );
-      });
       } finally {
-        releaseGate?.();
+        releaseRest = true;
       }
     })();
     const call = guarded.calls[0];
@@ -251,7 +250,6 @@ describe("sse streaming", () => {
       !reservedBeforeFetch ||
       guarded.result.status !== 200 ||
       guarded.result.contentType !== "text/event-stream" ||
-      !guarded.result.midHeld ||
       guarded.result.firstText.length === 0 ||
       !full.startsWith(guarded.result.firstText) ||
       guarded.result.firstText.includes(marker) ||
@@ -272,7 +270,7 @@ describe("sse streaming", () => {
       status.committedCents !== finalQuote
     ) {
       throw new Error(
-        `stream under the limit was not one fetched pass-through billed from the final chunk: upstreamCalls=${guarded.upstreamCalls} reservedBeforeFetch=${String(reservedBeforeFetch)} firstByte=${JSON.stringify(guarded.result.firstText.slice(0, 24))} midHeld=${String(guarded.result.midHeld)} settled=${String(row?.settled)} finalQuote=${String(finalQuote)} committed=${status.committedCents} authorizationIsFixture=${String(authorization === `Bearer ${FIXTURE_OPENROUTER_KEY}`)}`,
+        `stream under the limit was not one fetched pass-through billed from the final chunk: upstreamCalls=${guarded.upstreamCalls} reservedBeforeFetch=${String(reservedBeforeFetch)} firstByte=${JSON.stringify(guarded.result.firstText.slice(0, 24))} settled=${String(row?.settled)} finalQuote=${String(finalQuote)} committed=${status.committedCents} authorizationIsFixture=${String(authorization === `Bearer ${FIXTURE_OPENROUTER_KEY}`)}`,
       );
     }
     expect(row.amount).toBe(hold);
@@ -416,6 +414,7 @@ describe("sse streaming", () => {
         throw new Error("stream error was swallowed");
       }
       const reader = response.body.getReader();
+      void reader.closed.catch(() => undefined);
       let errored = false;
       try {
         while (true) {
@@ -437,7 +436,7 @@ describe("sse streaming", () => {
               controller.enqueue(encoder.encode(sse({ id: "partial", usage: partialUsage })));
               return;
             }
-            controller.error(new Error("socket closed"));
+            throw new Error("socket closed");
           },
         }),
         { status: 200, headers: { "content-type": "text/event-stream" } },

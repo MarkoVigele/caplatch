@@ -9,6 +9,7 @@ export function forwardSse(
   onEnd: (usage: unknown, failed: boolean) => Promise<void>,
 ): ReadableStream<Uint8Array> {
   const reader = source.getReader();
+  void reader.closed.catch(() => undefined);
   const decoder = new TextDecoder();
   let buffer = "";
   let lastChunk: LastChunk = null;
@@ -66,15 +67,13 @@ export function forwardSse(
         next = await reader.read();
       } catch {
         await finish(true);
-        controller.error(new Error("upstream stream failed"));
-        return;
+        throw new Error("upstream stream failed");
       }
       if (next.done) {
         try {
           await finish(false);
-        } catch (error) {
-          controller.error(error instanceof Error ? error : new Error("upstream stream failed"));
-          return;
+        } catch {
+          throw new Error("upstream stream failed");
         }
         controller.close();
         return;
@@ -85,7 +84,7 @@ export function forwardSse(
         absorb(false);
       } catch {
         await finish(true);
-        controller.error(new Error("upstream stream failed"));
+        throw new Error("upstream stream failed");
       }
     },
     async cancel() {
