@@ -1,3 +1,4 @@
+import { readGate } from "./auth";
 import { LEDGER_NAME, REQUEST_ID_HEADER } from "./constants";
 import { proxyChat } from "./gate";
 import { isRequestId } from "./input";
@@ -106,16 +107,46 @@ function ledger(env: Cloudflare.Env) {
   return env.LEDGER.getByName(LEDGER_NAME);
 }
 
+function gateSecret(env: Cloudflare.Env): string | undefined {
+  try {
+    const value = env.GATE_TOKEN;
+    return typeof value === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** GATE_TOKEN before any reserve and before any upstream fetch. */
+function denyWithoutGate(request: Request, env: Cloudflare.Env): Response | null {
+  const decision = readGate(request.headers.get("authorization"), gateSecret(env));
+  if (decision === "ok") {
+    return null;
+  }
+  const error = decision === "unconfigured" ? "gate_unconfigured" : "unauthorized";
+  return json({ ok: false, error }, 401);
+}
+
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
     try {
       const stub = ledger(env);
       if (request.method === "GET" && (url.pathname === "/" || url.pathname === "")) {
-        return json({ name: "caplatch", slice: "M2b" }, 200);
+        return json({ name: "caplatch", slice: "M2c" }, 200);
       }
       if (request.method === "GET" && url.pathname === "/status") {
         return json(await stub.status(), 200);
+      }
+      if (
+        url.pathname === "/reserve" ||
+        url.pathname === "/settle" ||
+        url.pathname === "/release" ||
+        url.pathname === "/v1/chat/completions"
+      ) {
+        const denied = denyWithoutGate(request, env);
+        if (denied) {
+          return denied;
+        }
       }
       if (url.pathname === "/reserve") {
         if (request.method !== "POST") {

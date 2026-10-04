@@ -1,6 +1,7 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { LEDGER_NAME } from "../src/constants";
+import { FIXTURE_GATE_TOKEN } from "./fixture";
 
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") {
@@ -32,18 +33,26 @@ export async function getJson(path: string): Promise<Response> {
   return exports.default.fetch(new Request(`https://caplatch.test${path}`));
 }
 
+function hasAuthorization(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some((name) => name.toLowerCase() === "authorization");
+}
+
 export async function postJson(
   path: string,
   body: unknown,
   headers: Record<string, string> = {},
 ): Promise<Response> {
+  const outbound: Record<string, string> = {
+    "content-type": "application/json",
+    ...headers,
+  };
+  if (!hasAuthorization(headers)) {
+    outbound.authorization = `Bearer ${FIXTURE_GATE_TOKEN}`;
+  }
   return exports.default.fetch(
     new Request(`https://caplatch.test${path}`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...headers,
-      },
+      headers: outbound,
       body: JSON.stringify(body),
     }),
   );
