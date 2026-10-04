@@ -1,5 +1,7 @@
 import { LEDGER_NAME, REQUEST_ID_HEADER } from "./constants";
+import { decideChat } from "./gate";
 import { isRequestId } from "./input";
+import { forwardIfEnabled } from "./upstream";
 
 export { SpendLedger } from "./ledger";
 
@@ -107,10 +109,10 @@ function ledger(env: Cloudflare.Env) {
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
-    const stub = ledger(env);
     try {
+      const stub = ledger(env);
       if (request.method === "GET" && (url.pathname === "/" || url.pathname === "")) {
-        return json({ name: "caplatch", slice: "M1a" }, 200);
+        return json({ name: "caplatch", slice: "M1b" }, 200);
       }
       if (request.method === "GET" && url.pathname === "/status") {
         return json(await stub.status(), 200);
@@ -163,6 +165,32 @@ export default {
         }
         const result = await stub.release(body.reservationId);
         return json(result, httpStatus(result));
+      }
+      if (url.pathname === "/v1/chat/completions") {
+        if (request.method !== "POST") {
+          return fail("method_not_allowed", 405);
+        }
+        const body = await readJson(request);
+        if (body instanceof Response) {
+          return body;
+        }
+        const requestId = resolveRequestId(body, request);
+        if (requestId instanceof Response) {
+          return requestId;
+        }
+        const decision = await decideChat(
+          {
+            reserve: (amountCents, id) => stub.reserve(amountCents, id),
+            settle: (reservationId, actualCents) => stub.settle(reservationId, actualCents),
+          },
+          body,
+          requestId,
+        );
+        if (decision.kind === "accepted") {
+          await forwardIfEnabled(decision.payload);
+          return json(decision.result, httpStatus(decision.result));
+        }
+        return json(decision.body, decision.status);
       }
       return json({ ok: false, error: "not_found" }, 404);
     } catch {
