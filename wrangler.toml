@@ -1,0 +1,16 @@
+name = "caplatch"
+main = "src/index.ts"
+compatibility_date = "2026-10-04"
+
+# Non-secret configuration only. Do not put API keys or tokens in this file.
+[vars]
+CAP_CENTS = "1000"
+PERIOD = "month"
+
+[[durable_objects.bindings]]
+name = "LEDGER"
+class_name = "SpendLedger"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SpendLedger"]
