@@ -1,6 +1,6 @@
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
-import { FIXTURE_OPENROUTER_KEY } from "./test/fixture";
+import { FIXTURE_OPENROUTER_KEY } from "./test/fixture.ts";
 
 export default defineConfig({
   plugins: [
