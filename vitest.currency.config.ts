@@ -9,6 +9,7 @@ export default defineConfig({
       miniflare: {
         bindings: {
           CAP_CENTS: "10",
+          CURRENCY: "gbp",
           PERIOD: "month",
           UPSTREAM_ENABLED: "true",
           OPENROUTER_API_KEY: FIXTURE_OPENROUTER_KEY,
@@ -17,8 +18,7 @@ export default defineConfig({
     }),
   ],
   test: {
-    include: ["test/**/*.test.ts"],
-    exclude: ["test/lifetime.test.ts", "test/eur.test.ts", "test/currency-refuse.test.ts"],
+    include: ["test/currency-refuse.test.ts"],
     fileParallelism: false,
     reporters: ["verbose"],
     testTimeout: 30_000,

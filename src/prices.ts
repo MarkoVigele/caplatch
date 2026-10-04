@@ -16,6 +16,14 @@ const PRICES: Readonly<Record<string, TokenPrice>> = {
 /** Present in the latch, with no rates. A blank row must not be treated as free. */
 const UNPRICED_MODELS = new Set<string>(["fixture/unpriced"]);
 
+export function pricedModelIds(): readonly string[] {
+  return Object.keys(PRICES);
+}
+
+export function unpricedModelIds(): readonly string[] {
+  return [...UNPRICED_MODELS];
+}
+
 export type ModelLookup =
   | { ok: true; model: string; price: TokenPrice }
   | { ok: false; error: "unknown_model" | "missing_price" };

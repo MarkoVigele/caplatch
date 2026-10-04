@@ -112,7 +112,7 @@ export default {
     try {
       const stub = ledger(env);
       if (request.method === "GET" && (url.pathname === "/" || url.pathname === "")) {
-        return json({ name: "caplatch", slice: "M2a" }, 200);
+        return json({ name: "caplatch", slice: "M2b" }, 200);
       }
       if (request.method === "GET" && url.pathname === "/status") {
         return json(await stub.status(), 200);
@@ -186,6 +186,7 @@ export default {
           body,
           requestId,
           chatMode(env),
+          env.CURRENCY,
         );
         if (decision.kind === "stream") {
           return new Response(decision.body, {
