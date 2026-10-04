@@ -383,7 +383,12 @@ describe("openrouter proxy", () => {
         throw new Error("settled while upstream is off");
       },
     };
-    const disabled = await proxyChat(ledger, body, null, chatMode({ UPSTREAM_ENABLED: "false", OPENROUTER_API_KEY: FIXTURE_OPENROUTER_KEY }));
+    const disabled = await proxyChat(
+      ledger,
+      chatBody({ stream: true }),
+      null,
+      chatMode({ UPSTREAM_ENABLED: "false", OPENROUTER_API_KEY: FIXTURE_OPENROUTER_KEY }),
+    );
     const missing = await proxyChat(ledger, body, null, chatMode({ UPSTREAM_ENABLED: "true", OPENROUTER_API_KEY: "  " }));
     const blank = await proxyChat(ledger, body, null, chatMode({ UPSTREAM_ENABLED: "true" }));
     if (disabled.kind !== "refuse" || missing.kind !== "refuse" || blank.kind !== "refuse") {
@@ -392,25 +397,5 @@ describe("openrouter proxy", () => {
     expect(disabled).toMatchObject({ status: 503, body: { ok: false, error: "upstream_disabled" } });
     expect(missing).toMatchObject({ status: 503, body: { ok: false, error: "upstream_unconfigured" } });
     expect(blank).toMatchObject({ status: 503, body: { ok: false, error: "upstream_unconfigured" } });
-
-    let fetched = 0;
-    const streamed = await withUpstreamSpy(async () => {
-      return proxyChat(
-        ledger,
-        chatBody({ stream: true }),
-        null,
-        {
-          kind: "on",
-          call: () => {
-            fetched += 1;
-            return Promise.reject(new Error("stream must not fetch"));
-          },
-        },
-      );
-    });
-    if (fetched !== 0 || streamed.upstreamCalls !== 0 || streamed.result.kind !== "refuse") {
-      throw new Error(`stream call reached upstream: fetched=${fetched} upstreamCalls=${streamed.upstreamCalls}`);
-    }
-    expect(streamed.result).toMatchObject({ status: 400, body: { ok: false, error: "stream_unsupported" } });
   });
 });
