@@ -1,3 +1,4 @@
+import { readCurrency } from "./currency";
 import { estimateCallCents, lookupModel, quoteUsage, type TokenPrice } from "./prices";
 import { emptyByteStream, forwardSse } from "./stream";
 import type { UpstreamMode } from "./upstream";
@@ -72,20 +73,26 @@ async function settleCents(ledgerCall: LedgerCall, reservationId: string, cents:
 }
 
 /**
- * Model and price, then a pessimistic reserve, then one upstream call.
- * The reserve finishes before that call starts, so no request byte leaves
- * until the hold exists. Client `usage` is ignored. A non-stream bill is
- * the OpenRouter JSON `usage`. A stream bill is the `usage` on the last
- * SSE chunk, and those bytes are passed through. Missing usage charges
- * the full hold. A quote above the hold stays `exceeds_hold` and does
- * not fetch again. A thrown fetch or stream charges the hold once.
+ * Currency, then model and price, then a pessimistic reserve, then one
+ * upstream call. An unsupported currency is refused before reserve and
+ * before any fetch. The reserve finishes before that call starts, so no
+ * request byte leaves until the hold exists. Client `usage` is ignored.
+ * A non-stream bill is the OpenRouter JSON `usage`. A stream bill is the
+ * `usage` on the last SSE chunk, and those bytes are passed through.
+ * Missing usage charges the full hold. A quote above the hold stays
+ * `exceeds_hold` and does not fetch again. A thrown fetch or stream
+ * charges the hold once.
  */
 export async function proxyChat(
   ledgerCall: LedgerCall,
   body: Record<string, unknown>,
   requestId: string | null,
   mode: UpstreamMode,
+  currencyRaw: unknown,
 ): Promise<ProxyResult> {
+  if (!readCurrency(currencyRaw).ok) {
+    return refuse(400, { ok: false, error: "unsupported_currency" });
+  }
   const looked = lookupModel(body.model);
   if (!looked.ok) {
     return refuse(402, { ok: false, error: looked.error });

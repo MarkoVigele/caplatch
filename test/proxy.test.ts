@@ -388,9 +388,16 @@ describe("openrouter proxy", () => {
       chatBody({ stream: true }),
       null,
       chatMode({ UPSTREAM_ENABLED: "false", OPENROUTER_API_KEY: FIXTURE_OPENROUTER_KEY }),
+      undefined,
     );
-    const missing = await proxyChat(ledger, body, null, chatMode({ UPSTREAM_ENABLED: "true", OPENROUTER_API_KEY: "  " }));
-    const blank = await proxyChat(ledger, body, null, chatMode({ UPSTREAM_ENABLED: "true" }));
+    const missing = await proxyChat(
+      ledger,
+      body,
+      null,
+      chatMode({ UPSTREAM_ENABLED: "true", OPENROUTER_API_KEY: "  " }),
+      undefined,
+    );
+    const blank = await proxyChat(ledger, body, null, chatMode({ UPSTREAM_ENABLED: "true" }), "usd");
     if (disabled.kind !== "refuse" || missing.kind !== "refuse" || blank.kind !== "refuse") {
       throw new Error("upstream that is off still tried to forward");
     }

@@ -8,6 +8,9 @@ compatibility_date = "2026-10-04"
 CAP_CENTS = "1000"
 PERIOD = "month"
 UPSTREAM_ENABLED = "false"
+# CURRENCY is optional. Leave it unset, or set "usd", and CAP_CENTS stays US cents.
+# "eur" reads CAP_CENTS as euro-cents at a fixed 110 US cents per euro (100 → 110).
+# Any other value refuses POST /v1/chat/completions before reserve or fetch.
 
 [[durable_objects.bindings]]
 name = "LEDGER"

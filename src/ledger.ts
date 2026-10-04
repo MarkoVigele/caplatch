@@ -1,7 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import { IDEMPOTENCY_TTL_MS } from "./constants";
+import { enforcedCapCents } from "./currency";
 import { isNonNegativeCents, isPositiveCents, isRequestId, isReservationId } from "./input";
-import { parseCapCents, parsePeriod, windowFor, type PeriodMode, type PeriodWindow } from "./period";
+import { parsePeriod, windowFor, type PeriodMode, type PeriodWindow } from "./period";
 import type {
   InvalidReserve,
   LedgerStatus,
@@ -239,7 +240,7 @@ export class SpendLedger extends DurableObject<Cloudflare.Env> {
     if (invalid) {
       return invalid;
     }
-    const capCents = parseCapCents(this.env.CAP_CENTS);
+    const capCents = enforcedCapCents(this.env.CAP_CENTS, this.env.CURRENCY);
     const period = parsePeriod(this.env.PERIOD);
     const now = Date.now();
     const window = windowFor(now, period);
@@ -262,7 +263,7 @@ export class SpendLedger extends DurableObject<Cloudflare.Env> {
     if (!isNonNegativeCents(actualCents)) {
       return { ok: false, error: "invalid_amount" };
     }
-    const capCents = parseCapCents(this.env.CAP_CENTS);
+    const capCents = enforcedCapCents(this.env.CAP_CENTS, this.env.CURRENCY);
     const period = parsePeriod(this.env.PERIOD);
     const now = Date.now();
     const window = windowFor(now, period);
@@ -319,7 +320,7 @@ export class SpendLedger extends DurableObject<Cloudflare.Env> {
     if (!isReservationId(reservationId)) {
       return { ok: false, error: "invalid_reservation_id" };
     }
-    const capCents = parseCapCents(this.env.CAP_CENTS);
+    const capCents = enforcedCapCents(this.env.CAP_CENTS, this.env.CURRENCY);
     const period = parsePeriod(this.env.PERIOD);
     const now = Date.now();
     const window = windowFor(now, period);
@@ -359,7 +360,7 @@ export class SpendLedger extends DurableObject<Cloudflare.Env> {
   }
 
   status(): LedgerStatus {
-    const capCents = parseCapCents(this.env.CAP_CENTS);
+    const capCents = enforcedCapCents(this.env.CAP_CENTS, this.env.CURRENCY);
     const period = parsePeriod(this.env.PERIOD);
     const window = windowFor(Date.now(), period);
     const committed = this.ctx.storage.transactionSync(() =>
