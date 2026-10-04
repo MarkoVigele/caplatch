@@ -1,4 +1,5 @@
 import { estimateCallCents, lookupModel, quoteUsage, type TokenPrice } from "./prices";
+import { emptyByteStream, forwardSse } from "./stream";
 import type { UpstreamMode } from "./upstream";
 import type { ReserveResult, ReserveSuccess, SettleResult } from "./types";
 
@@ -9,7 +10,8 @@ type LedgerCall = {
 
 export type ProxyResult =
   | { kind: "refuse"; status: number; body: unknown }
-  | { kind: "upstream"; status: number; contentType: string; body: string };
+  | { kind: "upstream"; status: number; contentType: string; body: string }
+  | { kind: "stream"; status: number; contentType: string; body: ReadableStream<Uint8Array> };
 
 const NOT_FORWARDED = new Set([
   "usage",
@@ -71,9 +73,12 @@ async function settleCents(ledgerCall: LedgerCall, reservationId: string, cents:
 
 /**
  * Model and price, then a pessimistic reserve, then one upstream call.
- * Client `usage` is ignored. The bill comes from the OpenRouter body.
- * Missing response usage charges the full hold. A quote above the hold
- * stays `exceeds_hold` and does not fetch again.
+ * The reserve finishes before that call starts, so no request byte leaves
+ * until the hold exists. Client `usage` is ignored. A non-stream bill is
+ * the OpenRouter JSON `usage`. A stream bill is the `usage` on the last
+ * SSE chunk, and those bytes are passed through. Missing usage charges
+ * the full hold. A quote above the hold stays `exceeds_hold` and does
+ * not fetch again. A thrown fetch or stream charges the hold once.
  */
 export async function proxyChat(
   ledgerCall: LedgerCall,
@@ -84,9 +89,6 @@ export async function proxyChat(
   const looked = lookupModel(body.model);
   if (!looked.ok) {
     return refuse(402, { ok: false, error: looked.error });
-  }
-  if (body.stream === true) {
-    return refuse(400, { ok: false, error: "stream_unsupported" });
   }
   if (mode.kind === "off") {
     return refuse(503, { ok: false, error: mode.error });
@@ -101,7 +103,11 @@ export async function proxyChat(
     return refuse(409, { ok: false, error: "idempotency_replay" });
   }
 
-  return billOneCall(ledgerCall, looked.price, reserved, mode.call(outboundPayload(body)));
+  const pending = mode.call(outboundPayload(body));
+  if (body.stream === true) {
+    return billStream(ledgerCall, looked.price, reserved, pending);
+  }
+  return billOneCall(ledgerCall, looked.price, reserved, pending);
 }
 
 async function billOneCall(
@@ -135,4 +141,40 @@ async function billOneCall(
 
   const contentType = response.headers.get("content-type") ?? "application/json";
   return { kind: "upstream", status: response.status, contentType, body: text };
+}
+
+async function billStream(
+  ledgerCall: LedgerCall,
+  price: TokenPrice,
+  reserved: ReserveSuccess,
+  pending: Promise<Response>,
+): Promise<ProxyResult> {
+  let response: Response;
+  try {
+    response = await pending;
+  } catch {
+    await settleCents(ledgerCall, reserved.reservationId, reserved.amountCents);
+    return refuse(502, { ok: false, error: "upstream_unavailable" });
+  }
+
+  const contentType = response.headers.get("content-type") ?? "text/event-stream";
+  const source = response.body;
+  if (!source) {
+    await settleCents(ledgerCall, reserved.reservationId, reserved.amountCents);
+    return { kind: "stream", status: response.status, contentType, body: emptyByteStream() };
+  }
+
+  const body = forwardSse(source, async (usage, failed) => {
+    if (failed) {
+      await settleCents(ledgerCall, reserved.reservationId, reserved.amountCents);
+      return;
+    }
+    const actual = quoteUsage(price, usage);
+    if (actual === "missing_usage") {
+      await settleCents(ledgerCall, reserved.reservationId, reserved.amountCents);
+      return;
+    }
+    await settleCents(ledgerCall, reserved.reservationId, actual);
+  });
+  return { kind: "stream", status: response.status, contentType, body };
 }
