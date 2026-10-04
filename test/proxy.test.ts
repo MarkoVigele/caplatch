@@ -5,7 +5,7 @@ import { REQUEST_ID_HEADER } from "../src/constants";
 import { proxyChat } from "../src/gate";
 import { estimateCallCents, lookupModel, quoteUsage } from "../src/prices";
 import { OPENROUTER_CHAT_COMPLETIONS_URL, chatMode } from "../src/upstream";
-import { CLIENT_SUPPLIED_KEY, FIXTURE_OPENROUTER_KEY } from "./fixture";
+import { CLIENT_SUPPLIED_KEY, FIXTURE_GATE_TOKEN, FIXTURE_OPENROUTER_KEY } from "./fixture";
 import { audit, clearLedger, ledgerStub, postJson, withUpstreamSpy, type UpstreamCall } from "./helpers";
 
 beforeEach(async () => {
@@ -92,7 +92,6 @@ describe("openrouter proxy", () => {
         usage: { prompt_tokens: 1, completion_tokens: 1 },
         api_key: CLIENT_SUPPLIED_KEY,
       }),
-      { headers: { authorization: `Bearer ${CLIENT_SUPPLIED_KEY}` } },
     );
     const after = await ledgerStub().status();
     const afterAudit = await audit(after.periodKey);
@@ -124,6 +123,9 @@ describe("openrouter proxy", () => {
   it("fetches OpenRouter once under the cap and bills the response, not the client", async () => {
     if (env.OPENROUTER_API_KEY !== FIXTURE_OPENROUTER_KEY) {
       throw new Error("OPENROUTER_API_KEY binding is not the test fixture");
+    }
+    if (env.GATE_TOKEN !== FIXTURE_GATE_TOKEN) {
+      throw new Error("GATE_TOKEN binding is not the test fixture");
     }
     if (env.UPSTREAM_ENABLED !== "true") {
       throw new Error("UPSTREAM_ENABLED must be true for the proxy proof");
@@ -157,7 +159,6 @@ describe("openrouter proxy", () => {
         apiKey: CLIENT_SUPPLIED_KEY,
       }),
       {
-        headers: { authorization: `Bearer ${CLIENT_SUPPLIED_KEY}` },
         respond: () => upstreamJson(201, payload),
       },
     );
@@ -167,9 +168,11 @@ describe("openrouter proxy", () => {
     if (
       outcome.upstreamCalls !== 1 ||
       authorization !== `Bearer ${FIXTURE_OPENROUTER_KEY}` ||
+      authorization === `Bearer ${FIXTURE_GATE_TOKEN}` ||
       authorization.includes(CLIENT_SUPPLIED_KEY) ||
       call?.body?.includes(CLIENT_SUPPLIED_KEY) ||
       call?.body?.includes(FIXTURE_OPENROUTER_KEY) ||
+      call?.body?.includes(FIXTURE_GATE_TOKEN) ||
       forwarded?.usage !== undefined ||
       call?.url !== OPENROUTER_CHAT_COMPLETIONS_URL ||
       call?.method !== "POST"
@@ -200,7 +203,6 @@ describe("openrouter proxy", () => {
         usage: { prompt_tokens: 1, completion_tokens: 1 },
         api_key: CLIENT_SUPPLIED_KEY,
       }),
-      { headers: { authorization: `Bearer ${CLIENT_SUPPLIED_KEY}` } },
     );
     const unpriced = await postChat(
       chatBody({

@@ -12,6 +12,11 @@ declare namespace Cloudflare {
     UPSTREAM_ENABLED: string;
     /** Worker secret. Not a wrangler var. Absent until the installer sets it. */
     OPENROUTER_API_KEY?: string;
+    /**
+     * Worker secret the app sends as the SDK key. Not a wrangler var.
+     * Absent until the installer sets it. Chat stays closed until then.
+     */
+    GATE_TOKEN?: string;
   }
   interface GlobalProps {
     mainModule: typeof import("./src/index");

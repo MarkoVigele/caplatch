@@ -1,6 +1,6 @@
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
-import { FIXTURE_OPENROUTER_KEY } from "./test/fixture.ts";
+import { FIXTURE_GATE_TOKEN, FIXTURE_OPENROUTER_KEY } from "./test/fixture.ts";
 
 export default defineConfig({
   plugins: [
@@ -13,6 +13,7 @@ export default defineConfig({
           PERIOD: "month",
           UPSTREAM_ENABLED: "true",
           OPENROUTER_API_KEY: FIXTURE_OPENROUTER_KEY,
+          GATE_TOKEN: FIXTURE_GATE_TOKEN,
         },
       },
     }),

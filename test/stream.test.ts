@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { REQUEST_ID_HEADER } from "../src/constants";
 import { estimateCallCents, lookupModel, quoteUsage } from "../src/prices";
 import { OPENROUTER_CHAT_COMPLETIONS_URL } from "../src/upstream";
-import { CLIENT_SUPPLIED_KEY, FIXTURE_OPENROUTER_KEY } from "./fixture";
+import { CLIENT_SUPPLIED_KEY, FIXTURE_GATE_TOKEN, FIXTURE_OPENROUTER_KEY } from "./fixture";
 import { audit, clearLedger, ledgerStub, postJson, withUpstreamSpy } from "./helpers";
 
 beforeEach(async () => {
@@ -87,9 +87,10 @@ describe("sse streaming", () => {
     const beforeAudit = await audit(before.periodKey);
     const guarded = await failIfSlow(
       withUpstreamSpy(async () => {
-        const response = await postJson("/v1/chat/completions", chatBody({ usage: { prompt_tokens: 1, completion_tokens: 1 } }), {
-          authorization: `Bearer ${CLIENT_SUPPLIED_KEY}`,
-        });
+        const response = await postJson(
+          "/v1/chat/completions",
+          chatBody({ usage: { prompt_tokens: 1, completion_tokens: 1 } }),
+        );
         const text = await response.text();
         return { response, text };
       }, () => eventStream(`${sse({ id: "should-not-stream" })}data: [DONE]\n\n`)),
@@ -125,6 +126,9 @@ describe("sse streaming", () => {
   it("passes the first byte through on one fetch and bills the last usage chunk", async () => {
     if (env.OPENROUTER_API_KEY !== FIXTURE_OPENROUTER_KEY) {
       throw new Error("OPENROUTER_API_KEY binding is not the test fixture");
+    }
+    if (env.GATE_TOKEN !== FIXTURE_GATE_TOKEN) {
+      throw new Error("GATE_TOKEN binding is not the test fixture");
     }
     const price = pricedMini();
     const earlyUsage = { prompt_tokens: 0, completion_tokens: 0 };
@@ -173,7 +177,6 @@ describe("sse streaming", () => {
                   api_key: CLIENT_SUPPLIED_KEY,
                   apiKey: CLIENT_SUPPLIED_KEY,
                 }),
-                { authorization: `Bearer ${CLIENT_SUPPLIED_KEY}` },
               ),
               "caller did not see the first byte",
             );
@@ -258,12 +261,14 @@ describe("sse streaming", () => {
       guarded.result.text.includes("reservationId") ||
       guarded.result.text.includes("committedCents") ||
       authorization !== `Bearer ${FIXTURE_OPENROUTER_KEY}` ||
+      authorization === `Bearer ${FIXTURE_GATE_TOKEN}` ||
       call?.url !== OPENROUTER_CHAT_COMPLETIONS_URL ||
       call?.method !== "POST" ||
       forwarded?.stream !== true ||
       forwarded?.usage !== undefined ||
       call?.body?.includes(CLIENT_SUPPLIED_KEY) ||
       call?.body?.includes(FIXTURE_OPENROUTER_KEY) ||
+      call?.body?.includes(FIXTURE_GATE_TOKEN) ||
       !row ||
       row.status !== "settled" ||
       row.settled !== finalQuote ||

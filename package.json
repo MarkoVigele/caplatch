@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node test/readme-models.mjs && vitest run --config vitest.config.ts && vitest run --config vitest.lifetime.config.ts && vitest run --config vitest.eur.config.ts && vitest run --config vitest.currency.config.ts",
+    "test": "node test/readme-models.mjs && node test/readme-gate.mjs && vitest run --config vitest.config.ts && vitest run --config vitest.lifetime.config.ts && vitest run --config vitest.eur.config.ts && vitest run --config vitest.currency.config.ts && vitest run --config vitest.closed.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.json"
   },
   "devDependencies": {
