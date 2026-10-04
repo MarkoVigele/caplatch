@@ -2,6 +2,21 @@ import { runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { LEDGER_NAME } from "../src/constants";
 
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.href;
+  }
+  return input.url;
+}
+
+function isUpstreamUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return lower.startsWith("https://openrouter.ai/") || lower.startsWith("http://openrouter.ai/");
+}
+
 export function ledgerStub() {
   return env.LEDGER.getByName(LEDGER_NAME);
 }
@@ -32,6 +47,30 @@ export async function postJson(
       body: JSON.stringify(body),
     }),
   );
+}
+
+export async function withUpstreamSpy<T>(
+  run: () => Promise<T>,
+): Promise<{ result: T; upstreamCalls: number }> {
+  const seen: string[] = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = requestUrl(input);
+    if (isUpstreamUrl(url)) {
+      seen.push(url);
+      return new Response(JSON.stringify({ ok: true, error: "upstream_called" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return real(input, init);
+  }) as typeof fetch;
+  try {
+    const result = await run();
+    return { result, upstreamCalls: seen.length };
+  } finally {
+    globalThis.fetch = real;
+  }
 }
 
 export async function audit(

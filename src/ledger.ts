@@ -28,7 +28,7 @@ type IdempotencyRow = {
 
 type ReserveDecision = ReserveSuccess | ReserveRejected;
 
-const SCHEMA = [
+export const LEDGER_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS reservations (
     id TEXT PRIMARY KEY,
     request_id TEXT,
@@ -228,7 +228,7 @@ export class SpendLedger extends DurableObject<Cloudflare.Env> {
   constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
-      for (const statement of SCHEMA) {
+      for (const statement of LEDGER_SCHEMA) {
         ctx.storage.sql.exec(statement);
       }
     });
@@ -289,14 +289,21 @@ export class SpendLedger extends DurableObject<Cloudflare.Env> {
       if (row.status !== "held") {
         return { ok: false, error: "not_held", reservationId, state: row.status };
       }
-      this.ctx.storage.sql.exec(
+      if (actualCents > amount) {
+        return { ok: false, error: "exceeds_hold", reservationId };
+      }
+      const written = this.ctx.storage.sql.exec(
         `UPDATE reservations
          SET status = 'settled', settled_cents = ?, updated_at = ?
-         WHERE id = ? AND status = 'held'`,
+         WHERE id = ? AND status = 'held' AND amount_cents >= ?`,
         actualCents,
         now,
         reservationId,
+        actualCents,
       );
+      if (written.rowsWritten !== 1) {
+        return { ok: false, error: "exceeds_hold", reservationId };
+      }
       return {
         ...windowInfo(capCents, committedCents(this.ctx.storage.sql, window.periodKey), period, window),
         ok: true as const,
