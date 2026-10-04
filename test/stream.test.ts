@@ -261,7 +261,6 @@ describe("sse streaming", () => {
       guarded.result.text.includes("reservationId") ||
       guarded.result.text.includes("committedCents") ||
       authorization !== `Bearer ${FIXTURE_OPENROUTER_KEY}` ||
-      authorization === `Bearer ${FIXTURE_GATE_TOKEN}` ||
       call?.url !== OPENROUTER_CHAT_COMPLETIONS_URL ||
       call?.method !== "POST" ||
       forwarded?.stream !== true ||

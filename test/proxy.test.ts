@@ -168,7 +168,6 @@ describe("openrouter proxy", () => {
     if (
       outcome.upstreamCalls !== 1 ||
       authorization !== `Bearer ${FIXTURE_OPENROUTER_KEY}` ||
-      authorization === `Bearer ${FIXTURE_GATE_TOKEN}` ||
       authorization.includes(CLIENT_SUPPLIED_KEY) ||
       call?.body?.includes(CLIENT_SUPPLIED_KEY) ||
       call?.body?.includes(FIXTURE_OPENROUTER_KEY) ||

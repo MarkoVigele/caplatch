@@ -42,15 +42,17 @@ export async function postJson(
   body: unknown,
   headers: Record<string, string> = {},
 ): Promise<Response> {
-  const gate = hasAuthorization(headers) ? {} : { authorization: `Bearer ${FIXTURE_GATE_TOKEN}` };
+  const outbound: Record<string, string> = {
+    "content-type": "application/json",
+    ...headers,
+  };
+  if (!hasAuthorization(headers)) {
+    outbound.authorization = `Bearer ${FIXTURE_GATE_TOKEN}`;
+  }
   return exports.default.fetch(
     new Request(`https://caplatch.test${path}`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...gate,
-        ...headers,
-      },
+      headers: outbound,
       body: JSON.stringify(body),
     }),
   );

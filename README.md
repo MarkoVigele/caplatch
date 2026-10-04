@@ -10,14 +10,12 @@ Deploy this template on your own Cloudflare account; INGENIUMOWL e.U. does not h
 4. Then deliberately set `UPSTREAM_ENABLED` to `true` and set `CAP_CENTS` in `wrangler.toml`, and run `npx wrangler deploy` again so the Worker uses those vars. The file ships with `UPSTREAM_ENABLED` `"false"` and `CAP_CENTS` `"1000"`.
 5. In the app, change only `baseURL` to the Worker and use `GATE_TOKEN` as the SDK key, not the OpenRouter key.
 
-```js
-import OpenAI from "openai";
+    import OpenAI from "openai";
 
-const client = new OpenAI({
-  baseURL: "https://<your-worker>/v1",
-  apiKey: process.env.GATE_TOKEN,
-});
-```
+    const client = new OpenAI({
+      baseURL: "https://<your-worker>/v1",
+      apiKey: process.env.GATE_TOKEN,
+    });
 
 `GET /` returns `{ "name": "caplatch", "slice": "M2c" }` and does not require a token.
 
