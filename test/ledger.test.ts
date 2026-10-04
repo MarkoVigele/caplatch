@@ -81,10 +81,14 @@ describe("ledger", () => {
       return;
     }
     expect(blocked.resetsAt).toBe(windowFor(Date.now(), "month").resetsAt);
-    expect(await ledgerStub().settle(held.reservationId, 12)).toMatchObject({ ok: true, actualCents: 12 });
-    expect((await ledgerStub().status()).committedCents).toBe(12);
+    expect(await ledgerStub().settle(held.reservationId, 12)).toMatchObject({
+      ok: false,
+      error: "exceeds_hold",
+    });
+    expect((await ledgerStub().status()).committedCents).toBe(CAP);
+    expect(await audit(blocked.periodKey)).toMatchObject({ committed: CAP, held: CAP, rows: 1 });
     expect(await ledgerStub().reserve(1, "still-over")).toMatchObject({ ok: false, error: "cap_exceeded" });
-    expect((await ledgerStub().status()).committedCents).toBe(12);
+    expect((await ledgerStub().status()).committedCents).toBe(CAP);
   });
 
   it("ignores a previous UTC month when counting the cap", async () => {

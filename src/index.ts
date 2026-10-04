@@ -31,6 +31,7 @@ function httpStatus(result: { ok: boolean; error?: string }): number {
     case "idempotency_conflict":
     case "already_settled":
     case "not_held":
+    case "exceeds_hold":
       return 409;
     default:
       return 400;

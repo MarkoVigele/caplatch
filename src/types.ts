@@ -50,7 +50,13 @@ export type SettleSuccess = WindowInfo & {
 
 export type SettleFailure = {
   ok: false;
-  error: "invalid_amount" | "invalid_reservation_id" | "not_found" | "not_held" | "already_settled";
+  error:
+    | "invalid_amount"
+    | "invalid_reservation_id"
+    | "not_found"
+    | "not_held"
+    | "already_settled"
+    | "exceeds_hold";
   reservationId?: string;
   state?: string;
 };
